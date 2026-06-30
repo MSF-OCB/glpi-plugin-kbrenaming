@@ -107,6 +107,7 @@ function plugin_version_kbrenaming() {
            'license'        => 'AGPLv3+',
            'author'         => '<a href="mailto:sebastien.batteur@brussels.msf.org">SEBASTIEN BATTEUR</a>',
            'homepage'       => 'https://github.com/msf-ocb/glpi-plugin-kbrenaming',
+           'description'    => __('Normalizes Microsoft KB software inventory entries by grouping KB patches under their software update family, creating software versions, and enriching inventory data from the Microsoft Update Catalog.', PLUGIN_KBRENAMING_ID),
            'requirements'   => [
               'glpi' => [
                   'min' => PLUGIN_KBRENAMING_GLPI_MIN_VERSION,
