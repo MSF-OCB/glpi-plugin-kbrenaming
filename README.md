@@ -1,48 +1,48 @@
 # GLPI plugin kbrenaming
 
-`kbrenaming` normalise les entrees d'inventaire logiciel correspondant aux correctifs Microsoft KB.
+`kbrenaming` normalizes software inventory entries that represent Microsoft KB patches.
 
-Dans GLPI, certains inventaires remontent les correctifs Windows comme des logiciels independants nommes `KB5034441`, `KB5021233`, etc. Ce plugin transforme ces entrees en donnees plus exploitables: le correctif KB devient une version logicielle et le logiciel porte le nom de la famille de mise a jour Microsoft.
+Some GLPI inventories report Windows updates as standalone software records named `KB5034441`, `KB5021233`, and similar values. This plugin turns those raw KB software records into more useful GLPI software data: the KB number becomes a software version, while the software itself is named after the Microsoft update family.
 
-## Objectif
+## Purpose
 
-Le plugin evite d'avoir une longue liste de logiciels nommes uniquement par numero KB. Il regroupe les correctifs Microsoft sous un nom logiciel comprehensible, puis conserve le numero KB comme version.
+The plugin avoids long software inventories made of isolated KB numbers. It groups Microsoft patches under a readable software name and keeps the KB number as the version.
 
-Exemple de comportement attendu:
+Expected behavior example:
 
-- entree inventaire recue: `KB5034441`
-- recherche des metadonnees dans le Microsoft Update Catalog
-- creation ou reutilisation d'un groupe KB, par exemple une famille de mise a jour Windows
-- creation ou reutilisation d'un logiciel GLPI correspondant a cette famille
-- creation ou reutilisation d'une version logicielle nommee `KB5034441`
-- rattachement des machines inventoriees a cette version logicielle
+- inventory software received: `KB5034441`
+- metadata is searched in the Microsoft Update Catalog
+- a KB group is created or reused, usually matching a Windows update family
+- a GLPI software record is created or reused for that family
+- a GLPI software version named `KB5034441` is created or reused
+- inventoried computers are linked to that normalized software version
 
-## Compatibilite
+## Compatibility
 
-- GLPI: `>= 10.0.0` et `< 12.0.0`
-- Plugin teste syntaxiquement avec PHP 8.2
-- Le plugin est prevu pour GLPI 10 et GLPI 11
+- GLPI: `>= 10.0.0` and `< 12.0.0`
+- Intended for GLPI 10 and GLPI 11
+- Syntax-checked with PHP 8.2
 
-Le plugin est installe dans GLPI avec le nom technique `kbrenaming`.
+The technical plugin name is `kbrenaming`.
 
-## Fonctionnalites
+## Features
 
-- Detection des logiciels dont le nom correspond au motif `KB` suivi d'au moins six chiffres.
-- Enrichissement des KB depuis le Microsoft Update Catalog.
-- Creation automatique des donnees KB manquantes.
-- Regroupement des KB par famille de mise a jour.
-- Creation des versions logicielles GLPI correspondant aux numeros KB.
-- Reassociation des installations logicielles vers la version logicielle normalisee.
-- Hooks d'inventaire pour modifier les donnees logiciel avant leur integration.
-- Dropdowns GLPI pour administrer les KB et les groupes de KB.
-- Rapport GLPI pour analyser une KB par entite et version de systeme d'exploitation.
-- Commandes console de recherche et de migration batch presentes dans le code du plugin.
+- Detects software names matching `KB` followed by at least six digits.
+- Enriches unknown KB entries from the Microsoft Update Catalog.
+- Creates missing KB records automatically.
+- Groups KB patches by Microsoft update family.
+- Creates GLPI software versions matching the KB numbers.
+- Reassigns software installation relations to the normalized software version.
+- Provides inventory hooks to adjust software data before GLPI stores it.
+- Provides GLPI dropdowns to manage KB records and KB groups.
+- Provides a report to analyze one KB by entity and operating system version.
+- Includes console command classes for KB lookup and batch software normalization.
 
-## Fonctionnement technique
+## Technical Behavior
 
-### Detection des KB
+### KB Detection
 
-Le plugin traite uniquement les noms qui respectent le format:
+The plugin only processes names matching this pattern:
 
 ```text
 KB123456
@@ -50,138 +50,138 @@ KB1234567
 kb5034441
 ```
 
-Les autres logiciels sont ignores.
+All other software names are ignored.
 
-### Recherche Microsoft Update Catalog
+### Microsoft Update Catalog Lookup
 
-Quand une KB n'existe pas encore dans les tables du plugin, le plugin interroge:
+When a KB is not already known in the plugin tables, the plugin queries:
 
 ```text
 https://www.catalog.update.microsoft.com
 ```
 
-Le resultat est parse pour retrouver:
+The result is parsed to identify:
 
-- le titre de la mise a jour
-- la categorie Microsoft
-- le commentaire descriptif
-- la famille de mise a jour a utiliser comme logiciel GLPI
+- the update title
+- the Microsoft category
+- the descriptive comment
+- the update family to use as the GLPI software name
 
-Les appels externes sont limites par timeout et nombre de tentatives pour eviter les blocages si le service Microsoft est lent ou indisponible.
+External calls use a timeout and a limited retry count so a slow or unavailable Microsoft service does not block inventory processing indefinitely.
 
-### Normalisation dans GLPI
+### GLPI Normalization
 
-Quand un logiciel `KBxxxxxx` est detecte, le plugin:
+When a `KBxxxxxx` software record is detected, the plugin:
 
-1. recherche ou cree l'entree KB dans `glpi_plugin_kbrenaming_kbs`
-2. recherche ou cree le groupe dans `glpi_plugin_kbrenaming_kbgroups`
-3. recherche ou cree le logiciel GLPI correspondant a la famille de mise a jour
-4. recherche ou cree la version logicielle correspondant au numero KB
-5. deplace les relations d'installation vers la version logicielle normalisee
-6. supprime l'ancien logiciel `KBxxxxxx` quand il a ete remplace
+1. finds or creates the KB entry in `glpi_plugin_kbrenaming_kbs`
+2. finds or creates the KB group in `glpi_plugin_kbrenaming_kbgroups`
+3. finds or creates the GLPI software matching the update family
+4. finds or creates the software version matching the KB number
+5. moves installation relations to the normalized software version
+6. deletes the old standalone `KBxxxxxx` software record when it has been replaced
 
-## Tables ajoutees
+## Database Tables
 
 ### `glpi_plugin_kbrenaming_kbs`
 
-Stocke les KB connues par le plugin.
+Stores KB records known by the plugin.
 
-Champs principaux:
+Main fields:
 
-- `name`: numero KB, par exemple `KB5034441`
-- `comment`: description ou titre de la mise a jour
-- `plugin_kbrenaming_kbgroups_id`: groupe/famille de mise a jour
-- `disabled_update`: indicateur d'administration
+- `name`: KB number, for example `KB5034441`
+- `comment`: update description or title
+- `plugin_kbrenaming_kbgroups_id`: related KB group/update family
+- `disabled_update`: administrative flag
 
 ### `glpi_plugin_kbrenaming_kbgroups`
 
-Stocke les familles de mise a jour utilisees comme logiciels GLPI.
+Stores update families used as GLPI software records.
 
-Champs principaux:
+Main fields:
 
-- `name`: nom de la famille de mise a jour
-- `comment`: commentaire libre
-- `softwarecategories_id`: categorie logicielle GLPI associee
+- `name`: update family name
+- `comment`: free text comment
+- `softwarecategories_id`: related GLPI software category
 
 ## Installation
 
-Copier le plugin dans le dossier GLPI:
+Copy the plugin into the GLPI plugins directory:
 
 ```text
 glpi/plugins/kbrenaming
 ```
 
-Installer puis activer le plugin:
+Install and activate it:
 
 ```bash
 php bin/console plugin:install kbrenaming
 php bin/console plugin:activate kbrenaming
 ```
 
-Dans l'image Docker MSF, le plugin est clone depuis GitHub pendant le build. Le commit utilise est pilote par l'argument Docker:
+In the MSF GLPI Docker image, the plugin is cloned from GitHub during the image build. The selected plugin revision is controlled by the Docker argument:
 
 ```dockerfile
 ARG VERSION_PLUGIN_KBRENAMING=<commit>
 ```
 
-Apres une modification du plugin, pousser le nouveau commit puis mettre a jour cet argument dans l'image Docker.
+After changing this plugin, push the new plugin commit and then update that Docker argument when the image must consume the new revision.
 
-## Utilisation
+## Usage
 
-### Inventaire automatique
+### Automatic Inventory Processing
 
-Le cas principal est l'inventaire. Lorsqu'un agent ou un connecteur remonte un logiciel nomme `KBxxxxxx`, le plugin normalise automatiquement la donnee pendant le traitement GLPI.
+The primary use case is inventory normalization. When an agent or connector reports a software record named `KBxxxxxx`, the plugin normalizes the data during GLPI processing.
 
-### Administration manuelle
+### Manual Administration
 
-Le plugin ajoute deux dropdowns:
+The plugin adds two dropdowns:
 
 - `KB`
 - `Groups of KB`
 
-Ils permettent de consulter ou ajuster les KB et leurs groupes.
+They can be used to review or adjust KB records and their groups.
 
-### Rapport
+### Report
 
-Le rapport `Summaries numbers computer by entries by OS version for one KB` permet d'analyser la presence d'une KB par entite et par version de systeme d'exploitation.
+The report `Summaries numbers computer by entries by OS version for one KB` analyzes the presence of one KB by entity and operating system version.
 
-Le rapport accepte un nom de KB et une entite, puis affiche les totaux par version d'OS.
+The report accepts a KB name and an entity, then displays totals by OS version.
 
-### Commandes console
+### Console Commands
 
-Le code contient deux commandes console:
+The code contains two console command classes:
 
 ```bash
 php bin/console Kbrenaming:kb:finder KB5034441
 php bin/console Kbrenaming:kb:rename_software
 ```
 
-La premiere recherche ou cree les informations d'une KB. La seconde applique la normalisation aux logiciels KB deja presents en base.
+The first command looks up or creates data for one KB. The second command applies normalization to KB software records already present in the database.
 
-Si ces commandes n'apparaissent pas dans `php bin/console list`, verifier leur enregistrement dans les hooks console du plugin avant de les utiliser en production.
+If these commands do not appear in `php bin/console list`, verify their registration in the plugin console hooks before using them in production.
 
-## Limites connues
+## Known Limits
 
-- Le plugin depend de l'accessibilite du Microsoft Update Catalog pour enrichir une KB inconnue.
-- Si le catalogue Microsoft est indisponible, la KB est ignoree sans erreur bloquante.
-- Seuls les noms correspondant a `KB` suivi d'au moins six chiffres sont traites.
-- Le plugin ne modifie pas les logiciels qui ne sont pas des correctifs Microsoft KB.
-- Le plugin ne declare pas de compatibilite GLPI 12.
+- The plugin depends on Microsoft Update Catalog availability to enrich an unknown KB.
+- If the Microsoft catalog is unavailable, the KB is skipped without a blocking error.
+- Only names matching `KB` followed by at least six digits are processed.
+- Software records that are not Microsoft KB patches are not modified.
+- The plugin does not declare GLPI 12 compatibility.
 
-## Securite et robustesse
+## Security And Robustness
 
-Le plugin inclut des protections pour limiter les erreurs frequentes:
+The plugin includes safeguards to reduce common failure modes:
 
-- validation defensive des payloads d'inventaire
-- timeouts et retries limites pour les appels reseau
-- fallback si l'extension PHP `shmop` n'est pas disponible
-- casts des identifiants avant les operations DB
-- usage de l'API DB GLPI pour les suppressions et mises a jour critiques
-- echappement des sorties du rapport
+- defensive validation of inventory payloads
+- timeout and limited retries for network calls
+- fallback when the PHP `shmop` extension is unavailable
+- integer casting before DB operations
+- GLPI DB API usage for critical update and delete operations
+- escaped report output
 
 ## Maintenance
 
-Avant de publier une nouvelle version:
+Before publishing a new version:
 
 ```bash
 php -l setup.php
@@ -190,4 +190,4 @@ Get-ChildItem . -Recurse -Filter *.php | ForEach-Object { php -l $_.FullName }
 git diff --check
 ```
 
-Apres publication du commit plugin, mettre a jour l'image Docker GLPI si necessaire.
+After publishing the plugin commit, update the GLPI Docker image if needed.
