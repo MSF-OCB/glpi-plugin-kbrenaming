@@ -16,17 +16,29 @@ include ("../../../inc/includes.php");
 
 Session::checkRight("computer", READ);
 
-Html::header(__('Kb - ', 'kb') . __('Summeries numbers computer by entries by OS version for one KB', 'msf'), $_SERVER['PHP_SELF'], "utils", "report");
+if (!function_exists('plugin_kbrenaming_report_escape')) {
+    function plugin_kbrenaming_report_escape($value): string
+    {
+        return Html::entities_deep((string) $value);
+    }
+}
+
+Html::header(
+    __('Kb - ', 'kbrenaming') . __('Summeries numbers computer by entries by OS version for one KB', 'kbrenaming'),
+    filter_input(INPUT_SERVER, "PHP_SELF"),
+    "utils",
+    "report"
+);
 
 Report::title();
 
-$app_name = filter_input(INPUT_GET, "app_name");
+$app_name = trim((string) filter_input(INPUT_GET, "app_name"));
 
-$entities_id = filter_input(INPUT_GET, "entities_id");
-if ($entities_id == '') {
-    $entities_id = $_SESSION['glpiactive_entity'];
+$entities_id = filter_input(INPUT_GET, "entities_id", FILTER_VALIDATE_INT);
+if ($entities_id === false || $entities_id === null) {
+    $entities_id = (int) $_SESSION['glpiactive_entity'];
 }
-echo "<form action='".filter_input(INPUT_SERVER, "PHP_SELF")."' method='get'>";
+echo "<form action='".plugin_kbrenaming_report_escape(filter_input(INPUT_SERVER, "PHP_SELF"))."' method='get'>";
 echo "<table class='tab_cadre_fixe' cellpadding='2'>";
 echo "<tr><th colspan='2' class=''>". __('Summeries numbers computer by entries by OS version for one KB', 'msf') ."</th></tr>";
 echo "<tr class='tab_bg_1' align='center'>";
@@ -72,7 +84,7 @@ if (stripos( $app_name_sql, "^kb" ) !== 0){
     exit;
 }
 $entities_sql = '';
-if (!empty($entities_id) && $entities_id != '0'){
+if ($entities_id > 0){
     $entities_sql = ' AND `glpi_computers`.`entities_id` IN ('.implode(',', getSonsOf('glpi_entities', $entities_id)).') ';
 }
 
@@ -117,8 +129,9 @@ $os_versions = [];
 $nb_items = 0;
 
 while ($data=$DB->fetchArray($result)) {
-    if (!array_key_exists($data['entities_id']."|".$data['softwares_id'], $datas)){
-        $datas[$data['entities_id']."|".$data['softwares_id']."|".$data['softwareversions_id']] = [
+    $data_key = $data['entities_id']."|".$data['softwares_id']."|".$data['softwareversions_id'];
+    if (!array_key_exists($data_key, $datas)){
+        $datas[$data_key] = [
             -1 => 0,
             'entities_name' => $data['entities_name'],
             'softwares_name' => $data['softwares_name'],
@@ -133,8 +146,8 @@ while ($data=$DB->fetchArray($result)) {
             'value'=> 0
         ];
     }
-    $datas[$data['entities_id']."|".$data['softwares_id']."|".$data['softwareversions_id']][$data['operatingsystemversions_id']] = $data['total'];
-    $datas[$data['entities_id']."|".$data['softwares_id']."|".$data['softwareversions_id']][-1] += $data['total'];
+    $datas[$data_key][$data['operatingsystemversions_id']] = $data['total'];
+    $datas[$data_key][-1] += $data['total'];
     $os_versions[$data['operatingsystemversions_id']]['value'] += $data['total'];
     $nb_items += $data['total'];
 }
@@ -194,7 +207,7 @@ echo "<tr class='tab_bg_1'>";
 // echo "<th>".__('Software name')."</th>";
 echo "<th>".__('Entity')."</th>";
 foreach ($os_versions as $key => $value){
-    echo "<th>".__($value['label'])."</th>";
+    echo "<th>".plugin_kbrenaming_report_escape(__($value['label']))."</th>";
 }
 echo "</tr>";
 echo '</thead>';
@@ -241,16 +254,16 @@ foreach ($datas as $data)    {
     }
 
     echo "<td>";
-    echo "<a href=\"".$software_url."\" target='_blank'>" . $data['entities_name'] . "</a>";
+    echo "<a href=\"".plugin_kbrenaming_report_escape($software_url)."\" target='_blank'>" . plugin_kbrenaming_report_escape($data['entities_name']) . "</a>";
     echo "</td>";
 
     foreach ($os_versions as $key => $value){
         if ($key == -1){
             echo '<td style="white-space:nowrap;">';
-            echo "<a href=\"".$software_url."\" target='_blank'>" . $data[$key] . "</a> / " . $totals[$data['entities_id']][$key];
+            echo "<a href=\"".plugin_kbrenaming_report_escape($software_url)."\" target='_blank'>" . (int) $data[$key] . "</a> / " . (int) ($totals[$data['entities_id']][$key] ?? 0);
             echo "</td>";
         }else{
-            echo '<td style="white-space:nowrap;">'. (isset($data[$key]) && $data[$key] > 0 ?$data[$key] . " / " . $totals[$data['entities_id']][$key] : '&nbsp') . "</td>";        }
+            echo '<td style="white-space:nowrap;">'. (isset($data[$key]) && $data[$key] > 0 ?(int) $data[$key] . " / " . (int) ($totals[$data['entities_id']][$key] ?? 0) : '&nbsp') . "</td>";        }
     }
     echo "</tr>";
     $i ++;
@@ -259,10 +272,10 @@ echo '</tbody>';
 
 echo '<floter>';
 echo "<tr class='tab_bg_" . (1 + ($i % 2)) ."'>";
-echo "<th colspan='1'>".__($TOTAL)."</th>";
+echo "<th colspan='1'>".plugin_kbrenaming_report_escape(__($TOTAL))."</th>";
 foreach ($os_versions as $key => $value){
     echo "<th>";
-    echo "</td>". ($value['value'] > 0 ? $value['value']: '&nbsp') . "</td>";
+    echo "</td>". ($value['value'] > 0 ? (int) $value['value']: '&nbsp') . "</td>";
     echo "</th>";
 }
 echo "</tr>";

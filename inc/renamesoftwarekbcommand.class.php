@@ -46,7 +46,7 @@ use Symfony\Component\Console\Question\ChoiceQuestion;
 
 class RenamesoftwarekbCommand extends AbstractCommand{
 
-    protected function configure()
+    protected function configure(): void
     {
         parent::configure();
 
@@ -55,7 +55,7 @@ class RenamesoftwarekbCommand extends AbstractCommand{
 
     }
 
-    protected function execute(InputInterface $input, OutputInterface $output)
+    protected function execute(InputInterface $input, OutputInterface $output): int
     {
         $this->output = $output;
         $software_db = new Software();
@@ -64,9 +64,15 @@ class RenamesoftwarekbCommand extends AbstractCommand{
         $manufacturer_db = new Manufacturer();
         $input_manufacturer = ['name' => 'Microsoft'];
         $manufacturers_id = $manufacturer_db->findID($input_manufacturer);
+        if ($manufacturers_id < 0) {
+            $manufacturers_id = $manufacturer_db->import($input_manufacturer);
+        }
         $operatingsystem_db = new OperatingSystem();
         $input_operatingsystem = ['name' => 'Windows'];
         $operatingsystems_id = $operatingsystem_db->findID($input_operatingsystem);
+        if ($operatingsystems_id < 0) {
+            $operatingsystems_id = $operatingsystem_db->import($input_operatingsystem);
+        }
 //        $condition = ['name' => ['REGEXP', '^kb[0-9]{6,}$']];
 //        $softwares = $software_db->find($condition);
 
@@ -107,7 +113,6 @@ class RenamesoftwarekbCommand extends AbstractCommand{
             $condition = ['name' => $software['name']];
             $softwareversions = $softwareversion_db->find($condition);
             if ( !empty($softwareversions)){
-                echo '$softwareversions empty';
                 if (count($softwareversions)>1){
                     $output->writeln('<error>Error : multi software versions "' . $software['name'] . '" exist in db</error>');
                     continue;
@@ -119,29 +124,36 @@ class RenamesoftwarekbCommand extends AbstractCommand{
                     $softwareversion = array_shift($softwareversions);
                 }
                 $output->writeln(print_r($software,1), OutputInterface::VERBOSITY_DEBUG);
-                $condition = ['softwares_id' => $software['id']];
+                $condition = ['softwares_id' => (int) $software['id']];
                 $soft_versions =  $softwareversion_db->find($condition);
                 foreach ($soft_versions as $old_id => $soft_version){
-                    PluginKbrenamingToolbox::change_softwareversion($old_id, $softwareversion['id']);
+                    PluginKbrenamingToolbox::change_softwareversion((int) $old_id, (int) $softwareversion['id']);
                 }
             }else{
                 $kbData = $kb->getByName($software['name']);
                 if ($kbData === false ){
                     continue;
                 }
-                $condition = ['name' => $kbData->getField("plugin_kbrenaming_kbgroup")['name']];
+                $kb_group = $kbData->getField("plugin_kbrenaming_kbgroup");
+                if (!is_array($kb_group) || empty($kb_group['name'])) {
+                    continue;
+                }
+                $condition = ['name' => $kb_group['name']];
                 $softs = $software_db->find($condition,[],1);
                 if (empty($softs)){
-                    $input = $kbData->getField("plugin_kbrenaming_kbgroup");
+                    $input = $kb_group;
                     unset($input['id']);
                     unset($input['softwarecategory']);
-                    $input['entities_id'] = $software['entities_id'];
+                    $input['entities_id'] = (int) $software['entities_id'];
                     $input['is_recursive'] = 1;
                     $input['manufacturers_id'] = $manufacturers_id;
                     $soft_id = $software_db->add($input);
+                    if (!$soft_id) {
+                        continue;
+                    }
                 }else{
                     $soft = array_shift($softs);
-                    $soft_id = $soft['id'];
+                    $soft_id = (int) $soft['id'];
                 }
                 $condition = ['name' => $kbData->getField("name")];
                 $soft_versions = $softwareversion_db->find($condition,[],1);
@@ -149,7 +161,7 @@ class RenamesoftwarekbCommand extends AbstractCommand{
                     $input = [
                         'name' => $kbData->getfield('name'),
                         'comment' => $kbData->getfield('comment'),
-                        'entities_id' => $software['entities_id'],
+                        'entities_id' => (int) $software['entities_id'],
                         'is_recursive' => 1,
                         'softwares_id' => $soft_id,
                         'operatingsystems_id' => $operatingsystems_id
@@ -161,27 +173,22 @@ class RenamesoftwarekbCommand extends AbstractCommand{
 
                 }
                 if ($soft_version_id>0){
-                    $condition = ['softwares_id' => $software['id']];
+                    $condition = ['softwares_id' => (int) $software['id']];
                     $softwareversions =  $softwareversion_db->find($condition);
                     foreach ($softwareversions as $id => $softwareversion){
 //                        $this->getFromDB($this->fields['id']);
-                        PluginKbrenamingToolbox::change_softwareversion($id, $soft_version_id);
+                        PluginKbrenamingToolbox::change_softwareversion((int) $id, (int) $soft_version_id);
                     }
                 }
             }
 
-            $condition = ['softwares_id' => $software['id']];
+            $condition = ['softwares_id' => (int) $software['id']];
             $this->output->writeln('<comment>delete "' . print_r($condition,true) . '" </comment>', OutputInterface::VERBOSITY_VERY_VERBOSE);
 //            $softwareversion_db->delete($condition,true);
 
-            $result = $this->db->query(
-                "
-                DELETE FROM `" . SoftwareVersion::getTable() . "`
-                WHERE `" . SoftwareVersion::getTable() . "`.`softwares_id` = '" . $software['id'] . "' ;
-                "
-            );
+            $result = PluginKbrenamingToolbox::deleteSoftwareVersionsBySoftwareId((int) $software['id']);
             if($result!== false){
-                $condition = ['id' => $software['id']];
+                $condition = ['id' => (int) $software['id']];
                 $this->output->writeln('<comment>delete "' . print_r($condition,true) . '" </comment>', OutputInterface::VERBOSITY_VERY_VERBOSE);
                 $software_db->delete($condition,true);
 

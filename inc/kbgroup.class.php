@@ -59,7 +59,7 @@ class PluginKbrenamingKbGroup extends CommonDropdown {
 
     private function __prepareInput($input): array
     {
-        if (!empty($input['softwarecategory'])){
+        if (!empty($input['softwarecategory']['name'])){
             $softwarecategory = new SoftwareCategory();
             $input['softwarecategories_id'] = $softwarecategory->import(['name' => $input['softwarecategory']['name']]);
         }
@@ -68,7 +68,8 @@ class PluginKbrenamingKbGroup extends CommonDropdown {
 
     function post_getFromDB() {
         // softwarecategory
-        if ($software_category = SoftwareCategory::getById($this->getField('softwarecategories_id'))){
+        $softwarecategories_id = (int) $this->getField('softwarecategories_id');
+        if ($softwarecategories_id > 0 && $software_category = SoftwareCategory::getById($softwarecategories_id)){
             $this->fields['softwarecategory'] = $software_category->fields;
         }
     }

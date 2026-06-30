@@ -40,7 +40,7 @@ use Symfony\Component\Console\Question\ChoiceQuestion;
 
 class KbfindCommand extends AbstractCommand{
 
-    protected function configure()
+    protected function configure(): void
     {
         parent::configure();
 
@@ -55,12 +55,10 @@ class KbfindCommand extends AbstractCommand{
 
     }
 
-    protected function execute(InputInterface $input, OutputInterface $output)
+    protected function execute(InputInterface $input, OutputInterface $output): int
     {
-        $kbName = $input->getArgument('kb');
-        $kb = new PluginKbRenamingKb();
-        $condition['name'] = $kbName;
-        $kb = new PluginKbRenamingKb();
+        $kbName = (string) $input->getArgument('kb');
+        $kb = new PluginKbrenamingKb();
         $kbData = $kb->getByName($kbName);
         $output->writeln(print_r($kbData,1));
         $output->writeln('<info>' . __('Migration done.') . '</info>');

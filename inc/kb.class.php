@@ -24,7 +24,9 @@ class PluginKbrenamingKb extends CommonDropdown {
         'Updates'           => 'updates'
     ];
     const WAIT_TIME = 0.1;
-    const SLEEP_TIME = 100;
+    const SLEEP_TIME = 100000;
+    const CATALOG_TIMEOUT = 10;
+    const CATALOG_MAX_ATTEMPTS = 3;
     // From CommonDBTM
     public $dohistory          = true;
     public $can_be_translated  = true;
@@ -95,7 +97,7 @@ class PluginKbrenamingKb extends CommonDropdown {
 
     private function __prepareInput($input): array
     {
-        if (!empty($input['plugin_kbrenaming_kbgroup'])){
+        if (!empty($input['plugin_kbrenaming_kbgroup']['name'])){
             $kbgroups = new PluginKbrenamingKbGroup();
             $condition = ['name' => $input['plugin_kbrenaming_kbgroup']['name']];
             $input['plugin_kbrenaming_kbgroups_id'] = $kbgroups->findID($condition);
@@ -109,7 +111,8 @@ class PluginKbrenamingKb extends CommonDropdown {
 
     function post_getFromDB() {
         // PluginKbrenamingKbGroup
-        if ($kbgroups = PluginKbrenamingKbGroup::getById($this->getField('plugin_kbrenaming_kbgroups_id'))){
+        $kbgroups_id = (int) $this->getField('plugin_kbrenaming_kbgroups_id');
+        if ($kbgroups_id > 0 && $kbgroups = PluginKbrenamingKbGroup::getById($kbgroups_id)){
             $this->fields['plugin_kbrenaming_kbgroup'] = $kbgroups->fields;
         }
     }
@@ -141,69 +144,116 @@ class PluginKbrenamingKb extends CommonDropdown {
         $searchs[] = ['q'=> '(' . $kb_name . ')', 'sub' => '(' . $kb_name . ') '];
 //        $searchs[] = ['q'=> $kb_name, 'sub' =>  $kb_name];
         $kb_data['name'] = $kb_name;
-        libxml_use_internal_errors(true);
-        foreach ($searchs as $search){
-//            print_r(self::MICROSOFT_CATALOG_URL_SEARCH . $search['q']);
-            while(PluginKbrenamingToolbox::getLastRequest() + self::WAIT_TIME >= microtime(true)){
+        $previous_libxml_state = libxml_use_internal_errors(true);
+        try {
+            foreach ($searchs as $search){
+                $file = $this->fetchCatalogSearchPage($search['q']);
+                if ($file === null) {
+                    continue;
+                }
+
+                $dom = new DOMDocument();
+                if (!$dom->loadHTML($file, LIBXML_NOWARNING)) {
+                    unset($dom);
+                    continue;
+                }
+                unset($file);
+
+                $table_container = $dom->getElementById('tableContainer');
+                if ($table_container === null) {
+                    unset($dom);
+                    continue;
+                }
+
+                $table = $table_container->getElementsByTagName('tr');
+                if ($table->length <= 1){
+                    unset($table, $dom);
+                    continue;
+                }
+                $title_diff = '';
+                $selected_row = null;
+                for($i=1; $i < $table->length; $i++){
+                    $row = $table[$i];
+                    $product = self::getTableCellText($row, 2);
+                    if (stripos($product, 'GDR-DU')!==false){
+                        continue;
+                    }
+
+                    $title = self::getTableCellText($row, 1);
+                    if (stripos($title, '(' . $kb_name . ')')===false){
+                        continue;
+                    }
+
+                    $selected_row = $row;
+                    $title_diff = trim(
+                        PluginKbrenamingToolbox::str_union($title_diff, $title, 0, 16),
+                        " \t\n\r\0\x0B-_"
+                    );
+                }
+
+                if ($selected_row === null) {
+                    unset($table, $dom);
+                    continue;
+                }
+
+                $kb_data=array_merge_recursive($kb_data, $this->__find_name_and_comments( $title_diff, $kb_data['name'] ));
+                if (empty($kb_data['comment'])){
+                    $kb_data['comment'] = self::getTableCellText($selected_row, 1);
+                }
+                $category = self::getTableCellText($selected_row, 3);
+                $kb_data['plugin_kbrenaming_kbgroup']['softwarecategory']['name'] = self::CATEGORIES[$category] ?? $category;
+//            var_dump($kb_data);
+                $id = $this->add($kb_data);
+//            $id = false;
+                return ($id !== false)?(int) $id:-1;
+            }
+        } finally {
+            libxml_clear_errors();
+            libxml_use_internal_errors($previous_libxml_state);
+        }
+        return -1;
+    }
+
+    private function fetchCatalogSearchPage(string $query): ?string
+    {
+        $context = stream_context_create([
+            'http' => [
+                'timeout'       => self::CATALOG_TIMEOUT,
+                'ignore_errors' => true,
+                'header'        => "User-Agent: GLPI kbrenaming plugin\r\n"
+            ]
+        ]);
+
+        for ($attempt = 1; $attempt <= self::CATALOG_MAX_ATTEMPTS; $attempt++) {
+            while (PluginKbrenamingToolbox::getLastRequest() + self::WAIT_TIME >= microtime(true)) {
                 usleep(self::SLEEP_TIME);
             }
             PluginKbrenamingToolbox::setLastRequest();
-            $get_data = true;
-            while($get_data){
-                $file = file_get_contents(self::MICROSOFT_CATALOG_URL_SEARCH . $search['q'], false);
-                if (empty($file)){
-                    continue;
-                }
-                $dom = new DOMDocument;
-                $dom->loadHTML($file, LIBXML_NOWARNING );
-                unset($file);
-                $table = $dom->getElementById('tableContainer');
-                if (empty($table)){
-//                    echo '<info>',print_r(self::MICROSOFT_CATALOG_URL_SEARCH . $search['q'], true), '</info>';
-                    usleep(5000);
-                    unset($dom);
-                }else{
-                    $get_data = false;
-                }
+
+            $file = @file_get_contents(
+                self::MICROSOFT_CATALOG_URL_SEARCH . rawurlencode($query),
+                false,
+                $context
+            );
+
+            if (is_string($file) && $file !== '') {
+                return $file;
             }
 
-            $table = $dom->getElementById('tableContainer')->getElementsByTagName('tr');
-            if ($table->length <= 1){
-                unset($table, $dom);
-                continue;
-            }
-            $title_diff = '';
-            $row = $table[1];
-            for($i=1; $i < $table->length; $i++){
-                $row = $table[$i];
-                $product = trim($row->getElementsByTagName('td')[2]->textContent);
-                if (stripos($product, 'GDR-DU')!==false){
-                    continue;
-                }
-
-                $title = trim($row->getElementsByTagName('td')[1]->textContent);
-                if (stripos($title, '(' . $kb_name . ')')===false){
-                    continue;
-                }
-
-                $title_diff = trim(PluginKbrenamingToolbox::str_union($title_diff, trim($row->getElementsByTagName('td')[1]->textContent),0, 16),$characters = " \t\n\r\0\x0B-_");
-
-            }
-
-            $kb_data=array_merge_recursive($kb_data, $this->__find_name_and_comments( $title_diff, $kb_data['name'] ));
-            if (empty($kb_data['comment'])){
-                $kb_data['comment'] = trim($row->getElementsByTagName('td')[1]->textContent);
-            }
-            $category = trim($row->getElementsByTagName('td')[3]->textContent);
-            $kb_data['plugin_kbrenaming_kbgroup']['softwarecategory']['name'] = self::CATEGORIES[$category] ?? $category;
-//            var_dump($kb_data);
-            $id = $this->add($kb_data);
-//            $id = false;
-            return ($id !== false)?$id:-1;
+            usleep(self::SLEEP_TIME);
         }
-        libxml_clear_errors();
-        libxml_use_internal_errors();
-        return -1;
+
+        return null;
+    }
+
+    private static function getTableCellText(DOMElement $row, int $index): string
+    {
+        $cells = $row->getElementsByTagName('td');
+        if ($cells->length <= $index) {
+            return '';
+        }
+
+        return trim($cells[$index]->textContent);
     }
 
 /*    function str_union(string $string1, string $string2, int $num = 0): string{

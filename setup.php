@@ -37,11 +37,14 @@
  *
  */
 
-define ("PLUGIN_KBRENAMING_VERSION", "2.0.0");
+use Glpi\Plugin\Hooks;
+
+define ("PLUGIN_KBRENAMING_VERSION", "2.1.0");
+define ("PLUGIN_KBRENAMING_ID", "kbrenaming");
 // Minimal GLPI version, inclusive
 define('PLUGIN_KBRENAMING_GLPI_MIN_VERSION', '10.0.0');
 // Maximum GLPI version, exclusive
-define('PLUGIN_KBRENAMING_GLPI_MAX_VERSION', '10.1.0');
+define('PLUGIN_KBRENAMING_GLPI_MAX_VERSION', '12.0.0');
 
 define ("PLUGIN_KBRENAMING_OFFICIAL_RELEASE", "1");
 define ("PLUGIN_KBRENAMING_REALVERSION", PLUGIN_KBRENAMING_VERSION . "");
@@ -56,7 +59,7 @@ define ("PLUGIN_KBRENAMING_PROCEDURE", "glpi_plugin_kbrenaming");
 function plugin_init_kbrenaming() {
     global $PLUGIN_HOOKS, $CFG_GLPI;
 
-    $PLUGIN_HOOKS['csrf_compliant']['kbrenaming'] = true;
+    $PLUGIN_HOOKS[Hooks::CSRF_COMPLIANT][PLUGIN_KBRENAMING_ID] = true;
 
     $Plugin = new Plugin();
     $moduleId = 0;
@@ -70,23 +73,23 @@ function plugin_init_kbrenaming() {
 
         Plugin::registerClass('PluginKbrenamingKb');
         Plugin::registerClass('PluginKbrenamingKbGroup');
-        $PLUGIN_HOOKS['fusioninventory_addinventoryinfos']['kbrenaming'] = 'plugin_fusioninventory_addinventoryinfos_kbrenaming';
+        $PLUGIN_HOOKS['fusioninventory_addinventoryinfos'][PLUGIN_KBRENAMING_ID] = 'plugin_fusioninventory_addinventoryinfos_kbrenaming';
 
 
-        $PLUGIN_HOOKS['item_add']['kbrenaming'] = [
-            'Software'   => 'plugin_item_add_update_kbrenaming'
+        $PLUGIN_HOOKS[Hooks::ITEM_ADD][PLUGIN_KBRENAMING_ID] = [
+            Software::class   => 'plugin_item_add_update_kbrenaming'
         ];
-        $PLUGIN_HOOKS['item_update']['kbrenaming'] = [
-            'Software'   => 'plugin_item_add_update_kbrenaming'
+        $PLUGIN_HOOKS[Hooks::ITEM_UPDATE][PLUGIN_KBRENAMING_ID] = [
+            Software::class   => 'plugin_item_add_update_kbrenaming'
         ];
-        $PLUGIN_HOOKS['post_item_form']['kbrenaming'] =  'plugin_post_item_form_kbrenaming';
+        $PLUGIN_HOOKS['post_item_form'][PLUGIN_KBRENAMING_ID] =  'plugin_post_item_form_kbrenaming';
 
         $report_list=[];
 
         if (Session::haveRight('software', READ)) {
-            $report_list["report/kb_entities_osversion.php"] = __('Summaries numbers computer by entries by OS version for one KB', 'msf');
+            $report_list["report/kb_entities_osversion.php"] = __('Summaries numbers computer by entries by OS version for one KB', PLUGIN_KBRENAMING_ID);
         }
-        $PLUGIN_HOOKS['reports']['kbrenaming'] = $report_list;
+        $PLUGIN_HOOKS['reports'][PLUGIN_KBRENAMING_ID] = $report_list;
 
     }
 }
@@ -99,7 +102,7 @@ function plugin_init_kbrenaming() {
  */
 function plugin_version_kbrenaming() {
    return ['name'           => 'kb Software',
-           'shortname'      => 'kbrenaming',
+           'shortname'      => PLUGIN_KBRENAMING_ID,
            'version'        => PLUGIN_KBRENAMING_VERSION,
            'license'        => 'AGPLv3+',
            'author'         => '<a href="mailto:sebastien.batteur@brussels.msf.org">SEBASTIEN BATTEUR</a>',

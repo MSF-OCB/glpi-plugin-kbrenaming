@@ -42,20 +42,47 @@
 *
 * @return boolean
 */
+function plugin_kbrenaming_is_kb_name(string $name): bool
+{
+    return preg_match('/^kb[0-9]{6,}$/i', trim($name)) === 1;
+}
+
+function plugin_kbrenaming_add_display_preferences(string $itemtype, array $preferences): void
+{
+    global $DB;
+
+    $existing = $DB->request([
+        'FROM'  => DisplayPreference::getTable(),
+        'WHERE' => ['itemtype' => $itemtype],
+        'LIMIT' => 1
+    ]);
+    if ($existing->count() > 0) {
+        return;
+    }
+
+    $display_preference = new DisplayPreference();
+    foreach ($preferences as $preference) {
+        $display_preference->add([
+            'itemtype' => $itemtype,
+            'num'      => (int) $preference['num'],
+            'rank'     => (int) $preference['rank'],
+            'users_id' => 0
+        ]);
+    }
+}
+
 function plugin_kbrenaming_install() {
 
     global $DB;
 
-
-    if (basename(filter_input(INPUT_SERVER, "SCRIPT_NAME")) != "cli_install.php") {
+    if (!Toolbox::isCommandLine()) {
         Html::header(__('Setup'), filter_input(INPUT_SERVER, "PHP_SELF"), "config", "plugins");
-        $migrationname = 'Migration';
-    } else {
-        $migrationname = 'CliMigration';
     }
 
-    $migration = new $migrationname(PLUGIN_KBRENAMING_VERSION);
+    $migration = new Migration(PLUGIN_KBRENAMING_VERSION);
     $migration->displayMessage("creation Table in db ");
+    $default_charset = DBConnection::getDefaultCharset();
+    $default_collation = DBConnection::getDefaultCollation();
 
     //Create table only if it does not exists yet!
     if (!$DB->tableExists('glpi_plugin_kbrenaming_kbs')) {
@@ -70,8 +97,12 @@ function plugin_kbrenaming_install() {
                   UNIQUE KEY `name_UNIQUE` (`name`),
                   KEY `name` (`name`),
                   KEY `plugin_kbrenaming_kbgroups_id` (`plugin_kbrenaming_kbgroups_id`)
-                ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci";
+                ) ENGINE=InnoDB DEFAULT CHARSET=$default_charset COLLATE=$default_collation";
         $DB->queryOrDie($query, $DB->error());
+    } else {
+        $migration->addField('glpi_plugin_kbrenaming_kbs', 'disabled_update', 'bool', ['value' => 0]);
+        $migration->addKey('glpi_plugin_kbrenaming_kbs', 'name');
+        $migration->addKey('glpi_plugin_kbrenaming_kbs', 'plugin_kbrenaming_kbgroups_id');
     }
 
     //Create table only if it does not exists yet!
@@ -86,31 +117,27 @@ function plugin_kbrenaming_install() {
                   UNIQUE KEY `name_UNIQUE` (`name`),
                   KEY `name` (`name`),
                   KEY `softwarecategories_id` (`softwarecategories_id`)
-                ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci";
+                ) ENGINE=InnoDB DEFAULT CHARSET=$default_charset COLLATE=$default_collation";
         $DB->queryOrDie($query, $DB->error());
+    } else {
+        $migration->addField('glpi_plugin_kbrenaming_kbgroups', 'softwarecategories_id', 'integer', ['value' => 0]);
+        $migration->addKey('glpi_plugin_kbrenaming_kbgroups', 'name');
+        $migration->addKey('glpi_plugin_kbrenaming_kbgroups', 'softwarecategories_id');
     }
 
     // add display preferences
-    $query_display_pref = "SELECT id
-      FROM glpi_displaypreferences
-      WHERE itemtype = 'PluginKbrenamingKb'";
-    $res_display_pref = $DB->query($query_display_pref);
-    if ($DB->numrows($res_display_pref) == 0) {
-        $DB->query("INSERT INTO `glpi_displaypreferences` VALUES (NULL,'PluginKbrenamingKb','3002','1','0');");
-        $DB->query("INSERT INTO `glpi_displaypreferences` VALUES (NULL,'PluginKbrenamingKb','16','2','0');");
-        $DB->query("INSERT INTO `glpi_displaypreferences` VALUES (NULL,'PluginKbrenamingKb','3003','3','0');");
-    }
-    $query_display_pref = "SELECT id
-      FROM glpi_displaypreferences
-      WHERE itemtype = 'PluginKbrenamingKbGroup'";
-    $res_display_pref = $DB->query($query_display_pref);
-    if ($DB->numrows($res_display_pref) == 0) {
-        $DB->query("INSERT INTO `glpi_displaypreferences` VALUES (NULL,'PluginKbrenamingKbGroup','3001','1','0');");
-        $DB->query("INSERT INTO `glpi_displaypreferences` VALUES (NULL,'PluginKbrenamingKbGroup','16','2','0');");
-    }
+    plugin_kbrenaming_add_display_preferences('PluginKbrenamingKb', [
+        ['num' => 3002, 'rank' => 1],
+        ['num' => 16, 'rank' => 2],
+        ['num' => 3003, 'rank' => 3],
+    ]);
+    plugin_kbrenaming_add_display_preferences('PluginKbrenamingKbGroup', [
+        ['num' => 3001, 'rank' => 1],
+        ['num' => 16, 'rank' => 2],
+    ]);
 
     //execute the whole migration
-    //$migration->executeMigration();
+    $migration->executeMigration();
 
     return true;
 }
@@ -149,10 +176,9 @@ function plugin_kbrenaming_uninstall() {
 }
 
 function plugin_item_add_update_kbrenaming(Software $parm): Software {
-    global $DB;
     Toolbox::logDebug('-------------------- Start item_add/update : '. get_class($parm) .'--------------------');
-    $kbName = $parm->fields['name'];
-    if (preg_match('/^kb[0-9]{6,}$/i', $kbName,) !== 1) {
+    $kbName = trim((string) ($parm->fields['name'] ?? ''));
+    if (!plugin_kbrenaming_is_kb_name($kbName)) {
         return $parm;
     }
     Toolbox::logDebug('$parm : ' . print_r($parm, true));
@@ -166,7 +192,13 @@ function plugin_item_add_update_kbrenaming(Software $parm): Software {
     $old_field = $parm->fields;
     Toolbox::logDebug('$kbData : ' . print_r($kbData, true));
     $software = new Software();
-    $condition = ['name' => $kbData->fields['plugin_kbrenaming_kbgroup']['name']];
+    $kb_group = $kbData->fields['plugin_kbrenaming_kbgroup'] ?? [];
+    $kb_group_name = trim((string) ($kb_group['name'] ?? ''));
+    if ($kb_group_name === '') {
+        return $parm;
+    }
+
+    $condition = ['name' => $kb_group_name];
     Toolbox::logDebug('$condition : ' . print_r($condition, true));
     $softs = $software->find($condition, [], 1);
     Toolbox::logDebug('$soft : ' . print_r($softs, true));
@@ -175,17 +207,23 @@ function plugin_item_add_update_kbrenaming(Software $parm): Software {
         $manufacturer_db = new Manufacturer();
         $input_manufacturer = ['name' => 'Microsoft'];
         $manufacturers_id = $manufacturer_db->findID($input_manufacturer);
+        if ($manufacturers_id < 0) {
+            $manufacturers_id = $manufacturer_db->import($input_manufacturer);
+        }
 
-        $input = $kbData->fields['plugin_kbrenaming_kbgroup'];
+        $input = $kb_group;
         unset($input['id']);
         unset($input['softwarecategory']);
-        $input['entities_id'] = $old_field['entities_id'];
+        $input['entities_id'] = (int) ($old_field['entities_id'] ?? 0);
         $input['is_recursive'] = 1;
         $input['manufacturers_id'] = $manufacturers_id;
         $soft_id = $software->add($input);
+        if (!$soft_id) {
+            return $parm;
+        }
     }else{
         $soft = array_shift($softs);
-        $soft_id = $soft['id'];
+        $soft_id = (int) $soft['id'];
         $software->getFromDB($soft_id);
     }
     $parm->fields = $software->fields;
@@ -193,6 +231,9 @@ function plugin_item_add_update_kbrenaming(Software $parm): Software {
     $operatingsystem_db = new OperatingSystem();
     $input_operatingsystem = ['name' => 'Windows'];
     $operatingsystems_id = $operatingsystem_db->findID($input_operatingsystem);
+    if ($operatingsystems_id < 0) {
+        $operatingsystems_id = $operatingsystem_db->import($input_operatingsystem);
+    }
 
     $softwareversion = new SoftwareVersion();
     $condition = ['name' => $kbData->fields['name']];
@@ -201,7 +242,7 @@ function plugin_item_add_update_kbrenaming(Software $parm): Software {
         $input = [
             'name' => $kbData->fields['name'],
             'comment' => $kbData->fields['comment'],
-            'entities_id' => $old_field['entities_id'],
+            'entities_id' => (int) ($old_field['entities_id'] ?? 0),
             'is_recursive' => 1,
             'softwares_id' => $soft_id,
             'operatingsystems_id' => $operatingsystems_id
@@ -213,19 +254,18 @@ function plugin_item_add_update_kbrenaming(Software $parm): Software {
         $softwareversion->getFromDB($soft_version_id);
     }
     if ($soft_version_id>0){
-        $condition = ['softwares_id' => $old_field['id']];
+        $condition = ['softwares_id' => (int) ($old_field['id'] ?? 0)];
         $softwareversions =  $softwareversion->find($condition);
         foreach ($softwareversions as $id => $softwareversion){
-            PluginKbrenamingToolbox::change_softwareversion($id, $soft_version_id);
+            PluginKbrenamingToolbox::change_softwareversion((int) $id, (int) $soft_version_id);
         }
     }
-    if ($old_field['id'] !== $parm->fields['id'] ){
-        $result = $DB->query("
-                DELETE FROM `" . SoftwareVersion::getTable() . "`
-                WHERE `" . SoftwareVersion::getTable() . "`.`softwares_id` = '" . $old_field['id'] . "' ;
-        ");
+    $old_software_id = (int) ($old_field['id'] ?? 0);
+    $new_software_id = (int) ($parm->fields['id'] ?? 0);
+    if ($old_software_id > 0 && $old_software_id !== $new_software_id ){
+        $result = PluginKbrenamingToolbox::deleteSoftwareVersionsBySoftwareId($old_software_id);
         if($result!== false){
-            $condition = ['id' => $old_field['id']];
+            $condition = ['id' => $old_software_id];
             $software->delete($condition);
         }
     }
@@ -233,17 +273,18 @@ function plugin_item_add_update_kbrenaming(Software $parm): Software {
 }
 
 function plugin_post_item_form_kbrenaming($params){
-    if (isset($params['item']) && $params['item'] instanceof CommonDBTM && get_class($params['item']) == 'Software') {
+    if (isset($params['item']) && $params['item'] instanceof Software) {
         Toolbox::logDebug('-------------------- Start post_item_form : '. get_class($params['item']) .'--------------------');
         $software = $params['item'];
-        if ($software->fields['is_deleted']==1 && preg_match('/^kb[0-9]{6,}$/i', $software->fields['name'],) === 1){
+        $software_name = trim((string) ($software->fields['name'] ?? ''));
+        if ((int) ($software->fields['is_deleted'] ?? 0) === 1 && plugin_kbrenaming_is_kb_name($software_name)){
             $softwareversion = new SoftwareVersion();
-            $condition = ['name' => $software->fields['name']];
+            $condition = ['name' => $software_name];
             $soft_versions = $softwareversion->find($condition,[],1);
             if (!empty($soft_versions)){
                 $soft_version = array_shift($soft_versions);
                 if(!empty($soft_version['softwares_id'])) {
-                    $condition = ['id' => $software->fields['id']];
+                    $condition = ['id' => (int) ($software->fields['id'] ?? 0)];
                     $software->delete($condition, true);
                     Html::redirect($software->getFormURLWithID($soft_version['softwares_id']));
                 }
@@ -262,9 +303,16 @@ function plugin_post_item_form_kbrenaming($params){
  */
 function plugin_fusioninventory_addinventoryinfos_kbrenaming($params = []){
     Toolbox::logDebug('-------------------- Start plugin_fusioninventory_addinventoryinfos_kbrenaming : --------------------');
+    if (empty($params['inventory']['SOFTWARES']) || !is_array($params['inventory']['SOFTWARES'])) {
+        return $params;
+    }
+
     foreach ($params['inventory']['SOFTWARES'] as &$software){
-        $kbName = trim($software['NAME']);
-        if (preg_match('/^kb[0-9]{6,}$/i', $kbName,) !== 1) {
+        if (!is_array($software)) {
+            continue;
+        }
+        $kbName = trim((string) ($software['NAME'] ?? ''));
+        if (!plugin_kbrenaming_is_kb_name($kbName)) {
             continue;
         }
         $kb = new PluginKbrenamingKb();
@@ -272,11 +320,16 @@ function plugin_fusioninventory_addinventoryinfos_kbrenaming($params = []){
         if ($kbData === false){
             continue;
         }
-        $software['COMMENTS'] = $kbData->fields['comment'];
-        $software['NAME'] = $kbData->fields['plugin_kbrenaming_kbgroup']['name'];
+        $kb_group = $kbData->fields['plugin_kbrenaming_kbgroup'] ?? [];
+        $kb_group_name = trim((string) ($kb_group['name'] ?? ''));
+        if ($kb_group_name === '') {
+            continue;
+        }
+        $software['COMMENTS'] = (string) ($kbData->fields['comment'] ?? '');
+        $software['NAME'] = $kb_group_name;
         $software['VERSION'] = $kbName;
         $software['PUBLISHER'] = 'Microsoft';
-        $software['SYSTEM_CATEGORY'] = $kbData->fields['plugin_kbrenaming_kbgroup']['softwarecategory']['name'];
+        $software['SYSTEM_CATEGORY'] = (string) ($kb_group['softwarecategory']['name'] ?? '');
     }
     return $params;
 }
@@ -291,7 +344,7 @@ function plugin_kbrenaming_getDropdown()
     $plugin = new Plugin();
 
 
-    if ($plugin->isActivated("kbrenaming")) {
+    if ($plugin->isActivated(PLUGIN_KBRENAMING_ID)) {
         return [
             'PluginKbrenamingKb' => PluginKbrenamingKb::getTypeName(2),
             'PluginKbrenamingKbGroup' => PluginKbrenamingKbGroup::getTypeName(2),
@@ -305,7 +358,7 @@ function plugin_kbrenaming_getDropdown()
 function plugin_kbrenaming_getDatabaseRelations() {
     $plugin = new Plugin();
 
-    if ($plugin->isActivated("kbrenaming")) {
+    if ($plugin->isActivated(PLUGIN_KBRENAMING_ID)) {
         return ["glpi_plugin_kbrenaming_kbgroups" => ["glpi_plugin_kbrenaming_kbs" => "plugin_kbrenaming_kbgroups_id"],
             "glpi_softwarecategories" => ["glpi_plugin_kbrenaming_kbgroups" => "softwarecategories_id"]];
     } else {
