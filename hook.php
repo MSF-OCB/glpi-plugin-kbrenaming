@@ -47,6 +47,16 @@ function plugin_kbrenaming_is_kb_name(string $name): bool
     return preg_match('/^kb[0-9]{6,}$/i', trim($name)) === 1;
 }
 
+function plugin_kbrenaming_is_command_line(): bool
+{
+    if (function_exists('isCommandLine')) {
+        return isCommandLine();
+    }
+
+    return PHP_SAPI === 'cli'
+        || basename((string) filter_input(INPUT_SERVER, "SCRIPT_NAME")) === "cli_install.php";
+}
+
 function plugin_kbrenaming_add_display_preferences(string $itemtype, array $preferences): void
 {
     global $DB;
@@ -75,7 +85,7 @@ function plugin_kbrenaming_install() {
 
     global $DB;
 
-    if (!Toolbox::isCommandLine()) {
+    if (!plugin_kbrenaming_is_command_line()) {
         Html::header(__('Setup'), filter_input(INPUT_SERVER, "PHP_SELF"), "config", "plugins");
     }
 
