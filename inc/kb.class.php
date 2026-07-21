@@ -27,6 +27,7 @@ class PluginKbrenamingKb extends CommonDropdown {
     const SLEEP_TIME = 100000;
     const CATALOG_TIMEOUT = 10;
     const CATALOG_MAX_ATTEMPTS = 3;
+    const CATALOG_MAX_RESPONSE_BYTES = 5 * 1024 * 1024;
     // From CommonDBTM
     public $dohistory          = true;
     public $can_be_translated  = true;
@@ -233,12 +234,19 @@ class PluginKbrenamingKb extends CommonDropdown {
             $file = @file_get_contents(
                 self::MICROSOFT_CATALOG_URL_SEARCH . rawurlencode($query),
                 false,
-                $context
+                $context,
+                0,
+                self::CATALOG_MAX_RESPONSE_BYTES
             );
 
             if (is_string($file) && $file !== '') {
                 return $file;
             }
+
+            Toolbox::logInFile(
+                'kbrenaming',
+                sprintf('Microsoft Update Catalog request failed (attempt %d/%d) for query "%s"', $attempt, self::CATALOG_MAX_ATTEMPTS, $query)
+            );
 
             usleep(self::SLEEP_TIME);
         }

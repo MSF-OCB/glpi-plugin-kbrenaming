@@ -89,7 +89,9 @@ function plugin_init_kbrenaming() {
         if (Session::haveRight('software', READ)) {
             $report_list["report/kb_entities_osversion.php"] = __('Summaries numbers computer by entries by OS version for one KB', PLUGIN_KBRENAMING_ID);
         }
-        $PLUGIN_HOOKS['reports'][PLUGIN_KBRENAMING_ID] = $report_list;
+        // GLPI 11 renamed the plugin stats/reports hook from 'reports' to 'stats'
+        // (Hooks::STATS); the old key is not read by Stat.php anymore.
+        $PLUGIN_HOOKS[Hooks::STATS][PLUGIN_KBRENAMING_ID] = $report_list;
 
     }
 }
@@ -148,5 +150,11 @@ function plugin_kbrenaming_check_config() {
  * @return boolean
  */
 function plugin_kbrenaming_haveTypeRight($type, $right) {
-   return true;
+   switch ($type) {
+      case 'PluginKbrenamingKb':
+      case 'PluginKbrenamingKbGroup':
+         return Session::haveRight('software', $right);
+   }
+
+   return false;
 }

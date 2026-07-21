@@ -108,7 +108,7 @@ function plugin_kbrenaming_install() {
                   KEY `name` (`name`),
                   KEY `plugin_kbrenaming_kbgroups_id` (`plugin_kbrenaming_kbgroups_id`)
                 ) ENGINE=InnoDB DEFAULT CHARSET=$default_charset COLLATE=$default_collation";
-        $DB->queryOrDie($query, $DB->error());
+        $DB->doQuery($query) or die($DB->error());
     } else {
         $migration->addField('glpi_plugin_kbrenaming_kbs', 'disabled_update', 'bool', ['value' => 0]);
         $migration->addKey('glpi_plugin_kbrenaming_kbs', 'name');
@@ -128,7 +128,7 @@ function plugin_kbrenaming_install() {
                   KEY `name` (`name`),
                   KEY `softwarecategories_id` (`softwarecategories_id`)
                 ) ENGINE=InnoDB DEFAULT CHARSET=$default_charset COLLATE=$default_collation";
-        $DB->queryOrDie($query, $DB->error());
+        $DB->doQuery($query) or die($DB->error());
     } else {
         $migration->addField('glpi_plugin_kbrenaming_kbgroups', 'softwarecategories_id', 'integer', ['value' => 0]);
         $migration->addKey('glpi_plugin_kbrenaming_kbgroups', 'name');
@@ -170,10 +170,7 @@ function plugin_kbrenaming_uninstall() {
         $tablename = 'glpi_plugin_kbrenaming_' . $table;
         //Create table only if it does not exists yet!
         if ($DB->tableExists($tablename)) {
-            $DB->queryOrDie(
-                "DROP TABLE `$tablename`",
-                $DB->error()
-            );
+            $DB->doQuery("DROP TABLE `$tablename`") or die($DB->error());
         }
     }
 

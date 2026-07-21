@@ -15,6 +15,7 @@ $TOTAL="Total";
 include ("../../../inc/includes.php");
 
 Session::checkRight("computer", READ);
+Session::checkRight("software", READ);
 
 if (!function_exists('plugin_kbrenaming_report_escape')) {
     function plugin_kbrenaming_report_escape($value): string
@@ -36,7 +37,7 @@ $app_name = trim((string) filter_input(INPUT_GET, "app_name"));
 
 $entities_id = filter_input(INPUT_GET, "entities_id", FILTER_VALIDATE_INT);
 if ($entities_id === false || $entities_id === null) {
-    $entities_id = (int) $_SESSION['glpiactive_entity'];
+    $entities_id = (int) ($_SESSION['glpiactive_entity'] ?? 0);
 }
 echo "<form action='".plugin_kbrenaming_report_escape(filter_input(INPUT_SERVER, "PHP_SELF"))."' method='get'>";
 echo "<table class='tab_cadre_fixe' cellpadding='2'>";
@@ -123,7 +124,7 @@ WHERE
 GROUP BY `glpi_computers`.`entities_id` , `glpi_operatingsystemversions`.`id`, `glpi_softwares`.`id`
 ORDER BY `glpi_softwares`.`name`, `glpi_computers`.`entities_id` ;";
 
-$result = $DB->query($query);
+$result = $DB->doQuery($query);
 $datas = [];
 $os_versions = [];
 $nb_items = 0;
@@ -181,7 +182,7 @@ WHERE
         `glpi_computers`.`is_deleted` = '0'
         AND `glpi_computers`.`is_template` = '0'
 GROUP BY `glpi_computers`.`entities_id` , `glpi_operatingsystemversions`.`id` ;";
-$result = $DB->query($query);
+$result = $DB->doQuery($query);
 $totals = [];
 while ($data=$DB->fetchArray($result)) {
     if (isset($os_versions[$data['operatingsystemversions_id']])){
@@ -270,7 +271,7 @@ foreach ($datas as $data)    {
 }
 echo '</tbody>';
 
-echo '<floter>';
+echo '<tfoot>';
 echo "<tr class='tab_bg_" . (1 + ($i % 2)) ."'>";
 echo "<th colspan='1'>".plugin_kbrenaming_report_escape(__($TOTAL))."</th>";
 foreach ($os_versions as $key => $value){
@@ -279,7 +280,7 @@ foreach ($os_versions as $key => $value){
     echo "</th>";
 }
 echo "</tr>";
-echo '</floter>';
+echo '</tfoot>';
 
 echo "</table>";
 
