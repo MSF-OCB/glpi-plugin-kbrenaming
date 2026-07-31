@@ -152,8 +152,8 @@ The report accepts a KB name and an entity, then displays totals by OS version.
 The code contains two console command classes:
 
 ```bash
-php bin/console Kbrenaming:kb:finder KB5034441
-php bin/console Kbrenaming:kb:rename_software
+php bin/console plugins:kbrenaming:kb:finder KB5034441
+php bin/console plugins:kbrenaming:kb:rename_software
 ```
 
 The first command looks up or creates data for one KB. The second command applies normalization to KB software records already present in the database.

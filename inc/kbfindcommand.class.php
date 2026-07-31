@@ -44,7 +44,7 @@ class KbfindCommand extends AbstractCommand{
     {
         parent::configure();
 
-        $this->setName('Kbrenaming:kb:finder');
+        $this->setName('plugins:kbrenaming:kb:finder');
         $this->setDescription(__('find KB'));
 
         $this->addArgument(
