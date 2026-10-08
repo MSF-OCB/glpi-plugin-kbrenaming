@@ -82,16 +82,19 @@ function plugin_init_kbrenaming() {
         $PLUGIN_HOOKS[Hooks::ITEM_UPDATE][PLUGIN_KBRENAMING_ID] = [
             Software::class   => 'plugin_item_add_update_kbrenaming'
         ];
-        $PLUGIN_HOOKS['post_item_form'][PLUGIN_KBRENAMING_ID] =  'plugin_post_item_form_kbrenaming';
+        // No 'post_item_form' hook: displaying a Software form must never write.
+        // Trashed KB-named softwares are merged and purged by the console command
+        // plugins:kbrenaming:kb:rename_software.
 
         $report_list=[];
 
         if (Session::haveRight('software', READ)) {
             $report_list["report/kb_entities_osversion.php"] = __('Summaries numbers computer by entries by OS version for one KB', PLUGIN_KBRENAMING_ID);
         }
-        // GLPI 11 renamed the plugin stats/reports hook from 'reports' to 'stats'
-        // (Hooks::STATS); the old key is not read by Stat.php anymore.
-        $PLUGIN_HOOKS[Hooks::STATS][PLUGIN_KBRENAMING_ID] = $report_list;
+        // Plugin reports are listed in Tools > Reports by Report::getReports(),
+        // which still reads $PLUGIN_HOOKS['reports'] in GLPI 11 ('path' => 'label').
+        // Hooks::STATS is the separate Statistics menu (needs the statistics right).
+        $PLUGIN_HOOKS['reports'][PLUGIN_KBRENAMING_ID] = $report_list;
 
     }
 }

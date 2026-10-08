@@ -84,10 +84,23 @@ if (stripos( $app_name_sql, "^kb" ) !== 0){
     Html::footer();
     exit;
 }
-$entities_sql = '';
-if ($entities_id > 0){
-    $entities_sql = ' AND `glpi_computers`.`entities_id` IN ('.implode(',', getSonsOf('glpi_entities', $entities_id)).') ';
+// Restrict to the entities the current user can see.
+// A requested entity must be one of the active entities (its sub-entities are
+// kept only if they are active too); otherwise we fall back to the whole active
+// entity set. "0"/empty never means "no filter".
+$active_entities = array_map('intval', $_SESSION['glpiactiveentities'] ?? []);
+$allowed_entities = $active_entities;
+if (in_array((int) $entities_id, $active_entities, true)) {
+    $allowed_entities = array_values(array_intersect(
+        array_map('intval', getSonsOf('glpi_entities', (int) $entities_id)),
+        $active_entities
+    ));
 }
+if (empty($allowed_entities)) {
+    Html::footer();
+    exit;
+}
+$entities_sql = ' ' . getEntitiesRestrictRequest('AND', 'glpi_computers', 'entities_id', $allowed_entities) . ' ';
 
 $query = "SELECT 
     `glpi_operatingsystemversions`.`id` AS operatingsystemversions_id,
@@ -181,6 +194,7 @@ FROM
 WHERE
         `glpi_computers`.`is_deleted` = '0'
         AND `glpi_computers`.`is_template` = '0'
+        ". $entities_sql . "
 GROUP BY `glpi_computers`.`entities_id` , `glpi_operatingsystemversions`.`id` ;";
 $result = $DB->doQuery($query);
 $totals = [];

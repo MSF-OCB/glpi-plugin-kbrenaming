@@ -279,29 +279,6 @@ function plugin_item_add_update_kbrenaming(Software $parm): Software {
     return $parm ;
 }
 
-function plugin_post_item_form_kbrenaming($params){
-    if (isset($params['item']) && $params['item'] instanceof Software) {
-        Toolbox::logDebug('-------------------- Start post_item_form : '. get_class($params['item']) .'--------------------');
-        $software = $params['item'];
-        $software_name = trim((string) ($software->fields['name'] ?? ''));
-        if ((int) ($software->fields['is_deleted'] ?? 0) === 1 && plugin_kbrenaming_is_kb_name($software_name)){
-            $softwareversion = new SoftwareVersion();
-            $condition = ['name' => $software_name];
-            $soft_versions = $softwareversion->find($condition,[],1);
-            if (!empty($soft_versions)){
-                $soft_version = array_shift($soft_versions);
-                if(!empty($soft_version['softwares_id'])) {
-                    $condition = ['id' => (int) ($software->fields['id'] ?? 0)];
-                    $software->delete($condition, true);
-                    Html::redirect($software->getFormURLWithID($soft_version['softwares_id']));
-                }
-            }
-
-        }
-
-    }
-}
-
 /**
  * Extra MMODEL and ENVS and copy in msf section in inventory
  *
