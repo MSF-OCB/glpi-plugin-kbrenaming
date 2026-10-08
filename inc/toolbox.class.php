@@ -59,6 +59,37 @@ class PluginKbrenamingToolbox
         @shmop_write($shm_id, $payload, 0);
     }
 
+    /**
+     * Seconds to wait before the next catalog request, between 0 and $interval.
+     * A last request stamped in the future (clock moved back, foreign value in
+     * the shared memory segment) must not block the caller forever.
+     */
+    public static function getWaitTime(float $last_request, float $now, float $interval): float
+    {
+        $wait = $last_request + $interval - $now;
+        if ($wait <= 0.0) {
+            return 0.0;
+        }
+        return min($wait, $interval);
+    }
+
+    /**
+     * Move the items of every old version to $new_id.
+     *
+     * @return bool false as soon as one move failed: the old versions must then
+     *              be kept, or their items would point to a deleted version.
+     */
+    public static function moveSoftwareVersions(array $old_ids, int $new_id): bool
+    {
+        $success = true;
+        foreach ($old_ids as $old_id) {
+            if (!self::change_softwareversion((int) $old_id, $new_id)) {
+                $success = false;
+            }
+        }
+        return $success;
+    }
+
     public static function change_softwareversion(int $old_id, int $new_id): bool
     {
         global $DB;

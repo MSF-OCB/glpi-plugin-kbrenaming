@@ -226,8 +226,13 @@ class PluginKbrenamingKb extends CommonDropdown {
         ]);
 
         for ($attempt = 1; $attempt <= self::CATALOG_MAX_ATTEMPTS; $attempt++) {
-            while (PluginKbrenamingToolbox::getLastRequest() + self::WAIT_TIME >= microtime(true)) {
-                usleep(self::SLEEP_TIME);
+            $wait = PluginKbrenamingToolbox::getWaitTime(
+                PluginKbrenamingToolbox::getLastRequest(),
+                microtime(true),
+                self::WAIT_TIME
+            );
+            if ($wait > 0.0) {
+                usleep((int) ceil($wait * 1000000));
             }
             PluginKbrenamingToolbox::setLastRequest();
 

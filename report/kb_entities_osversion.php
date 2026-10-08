@@ -8,11 +8,16 @@
  * @version GIT: $Id$
  * @author  Sébastien Batteur <sebastien.batteur@brussels.msf.org>
  */
-$USEDBREPLICATE=1;
-$DBCONNECTION_REQUIRED=0;
 $UNKNOWN='Unknown';
 $TOTAL="Total";
-include ("../../../inc/includes.php");
+if (!defined('GLPI_ROOT')) {
+    // GLPI 10 only: GLPI 11 boots itself, GLPI 12 deprecates this inclusion.
+    include ("../../../inc/includes.php");
+}
+
+// GLPI 11 loads this file inside a controller method: globals are not in scope.
+// The read connection replaces the $USEDBREPLICATE global removed in GLPI 11.
+$DBread = DBConnection::getReadConnection();
 
 Session::checkRight("computer", READ);
 Session::checkRight("software", READ);
@@ -20,7 +25,7 @@ Session::checkRight("software", READ);
 if (!function_exists('plugin_kbrenaming_report_escape')) {
     function plugin_kbrenaming_report_escape($value): string
     {
-        return Html::entities_deep((string) $value);
+        return htmlspecialchars((string) $value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
     }
 }
 
@@ -100,7 +105,7 @@ if (empty($allowed_entities)) {
     Html::footer();
     exit;
 }
-$entities_sql = ' ' . getEntitiesRestrictRequest('AND', 'glpi_computers', 'entities_id', $allowed_entities) . ' ';
+$entities_sql = ' AND `glpi_computers`.`entities_id` IN (' . implode(',', array_map('intval', $allowed_entities)) . ') ';
 
 $query = "SELECT 
     `glpi_operatingsystemversions`.`id` AS operatingsystemversions_id,
@@ -137,12 +142,12 @@ WHERE
 GROUP BY `glpi_computers`.`entities_id` , `glpi_operatingsystemversions`.`id`, `glpi_softwares`.`id`
 ORDER BY `glpi_softwares`.`name`, `glpi_computers`.`entities_id` ;";
 
-$result = $DB->doQuery($query);
+$result = $DBread->doQuery($query);
 $datas = [];
 $os_versions = [];
 $nb_items = 0;
 
-while ($data=$DB->fetchArray($result)) {
+while ($data=$DBread->fetchArray($result)) {
     $data_key = $data['entities_id']."|".$data['softwares_id']."|".$data['softwareversions_id'];
     if (!array_key_exists($data_key, $datas)){
         $datas[$data_key] = [
@@ -196,9 +201,9 @@ WHERE
         AND `glpi_computers`.`is_template` = '0'
         ". $entities_sql . "
 GROUP BY `glpi_computers`.`entities_id` , `glpi_operatingsystemversions`.`id` ;";
-$result = $DB->doQuery($query);
+$result = $DBread->doQuery($query);
 $totals = [];
-while ($data=$DB->fetchArray($result)) {
+while ($data=$DBread->fetchArray($result)) {
     if (isset($os_versions[$data['operatingsystemversions_id']])){
         if (!isset($totals[$data['entities_id']])){
             $totals[$data['entities_id']] = [];
