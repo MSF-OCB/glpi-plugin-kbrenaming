@@ -39,7 +39,7 @@
 
 use Glpi\Plugin\Hooks;
 
-define ("PLUGIN_KBRENAMING_VERSION", "2.1.0");
+define ("PLUGIN_KBRENAMING_VERSION", "2.1.1");
 define ("PLUGIN_KBRENAMING_ID", "kbrenaming");
 // Minimal GLPI version, inclusive
 define('PLUGIN_KBRENAMING_GLPI_MIN_VERSION', '10.0.0');
@@ -59,7 +59,10 @@ define ("PLUGIN_KBRENAMING_PROCEDURE", "glpi_plugin_kbrenaming");
 function plugin_init_kbrenaming() {
     global $PLUGIN_HOOKS, $CFG_GLPI;
 
-    $PLUGIN_HOOKS[Hooks::CSRF_COMPLIANT][PLUGIN_KBRENAMING_ID] = true;
+    // Only GLPI 10 needs it: deprecated in GLPI 11, the constant is removed in GLPI 12.
+    if (version_compare(GLPI_VERSION, '11.0.0', '<')) {
+        $PLUGIN_HOOKS['csrf_compliant'][PLUGIN_KBRENAMING_ID] = true;
+    }
 
     $Plugin = new Plugin();
     $moduleId = 0;

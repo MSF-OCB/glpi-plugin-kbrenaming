@@ -98,10 +98,10 @@ function plugin_kbrenaming_install() {
     if (!$DB->tableExists('glpi_plugin_kbrenaming_kbs')) {
         //table creation query
         $query = "CREATE TABLE `glpi_plugin_kbrenaming_kbs` (
-                  `id` int(11) NOT NULL AUTO_INCREMENT,
-                  `name` varchar(255) COLLATE utf8_unicode_ci NOT NULL,
-                  `comment` text COLLATE utf8_unicode_ci DEFAULT NULL,
-                  `plugin_kbrenaming_kbgroups_id` int(11) NOT NULL DEFAULT 0,
+                  `id` int unsigned NOT NULL AUTO_INCREMENT,
+                  `name` varchar(255) NOT NULL,
+                  `comment` text DEFAULT NULL,
+                  `plugin_kbrenaming_kbgroups_id` int unsigned NOT NULL DEFAULT 0,
                   `disabled_update` tinyint(1) NOT NULL DEFAULT 0,
                   PRIMARY KEY (`id`),
                   UNIQUE KEY `name_UNIQUE` (`name`),
@@ -119,10 +119,10 @@ function plugin_kbrenaming_install() {
     if (!$DB->tableExists('glpi_plugin_kbrenaming_kbgroups')) {
         //table creation query
         $query = "CREATE TABLE `glpi_plugin_kbrenaming_kbgroups` (
-                  `id` int(11) NOT NULL AUTO_INCREMENT,
-                  `name` varchar(255) COLLATE utf8_unicode_ci NOT NULL,
-                  `comment` text COLLATE utf8_unicode_ci DEFAULT NULL,
-                  `softwarecategories_id` int(11) NOT NULL DEFAULT 0,
+                  `id` int unsigned NOT NULL AUTO_INCREMENT,
+                  `name` varchar(255) NOT NULL,
+                  `comment` text DEFAULT NULL,
+                  `softwarecategories_id` int unsigned NOT NULL DEFAULT 0,
                   PRIMARY KEY (`id`),
                   UNIQUE KEY `name_UNIQUE` (`name`),
                   KEY `name` (`name`),
@@ -188,9 +188,7 @@ function plugin_item_add_update_kbrenaming(Software $parm): Software {
     if (!plugin_kbrenaming_is_kb_name($kbName)) {
         return $parm;
     }
-    Toolbox::logDebug('$parm : ' . print_r($parm, true));
     Toolbox::logDebug('$kbName : ' . $kbName);
-    Toolbox::logDebug('$parm : ' . print_r($parm, true));
     $kb = new PluginKbrenamingKb();
     $kbData = $kb->getByName($kbName);
     if ($kbData === false){
@@ -243,7 +241,9 @@ function plugin_item_add_update_kbrenaming(Software $parm): Software {
     }
 
     $softwareversion = new SoftwareVersion();
-    $condition = ['name' => $kbData->fields['name']];
+    // Only a version of the target software: a version of the KB software
+    // itself would be deleted below with the items moved onto it.
+    $condition = ['name' => $kbData->fields['name'], 'softwares_id' => (int) $soft_id];
     $soft_versions = $softwareversion->find($condition,[],1);
     if (empty($soft_versions)) {
         $input = [
@@ -260,12 +260,15 @@ function plugin_item_add_update_kbrenaming(Software $parm): Software {
         $soft_version_id = $soft_version['id'];
         $softwareversion->getFromDB($soft_version_id);
     }
-    if ($soft_version_id>0){
-        $condition = ['softwares_id' => (int) ($old_field['id'] ?? 0)];
-        $softwareversions =  $softwareversion->find($condition);
-        foreach ($softwareversions as $id => $softwareversion){
-            PluginKbrenamingToolbox::change_softwareversion((int) $id, (int) $soft_version_id);
-        }
+    // Without a target version, or if an item could not be moved, the old
+    // versions are kept: deleting them would orphan the installations.
+    if ((int) $soft_version_id <= 0) {
+        return $parm;
+    }
+    $condition = ['softwares_id' => (int) ($old_field['id'] ?? 0)];
+    $softwareversions =  $softwareversion->find($condition);
+    if (!PluginKbrenamingToolbox::moveSoftwareVersions(array_keys($softwareversions), (int) $soft_version_id)) {
+        return $parm;
     }
     $old_software_id = (int) ($old_field['id'] ?? 0);
     $new_software_id = (int) ($parm->fields['id'] ?? 0);

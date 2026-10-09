@@ -110,7 +110,11 @@ class RenamesoftwarekbCommand extends AbstractCommand{
                 OutputInterface::VERBOSITY_VERY_VERBOSE
             );
 
-            $condition = ['name' => $software['name']];
+            // Versions of the KB software itself are deleted below: never reuse one.
+            $condition = [
+                'name' => $software['name'],
+                'NOT'  => ['softwares_id' => (int) $software['id']]
+            ];
             $softwareversions = $softwareversion_db->find($condition);
             if ( !empty($softwareversions)){
                 if (count($softwareversions)>1){
@@ -126,8 +130,9 @@ class RenamesoftwarekbCommand extends AbstractCommand{
                 $output->writeln(print_r($software,1), OutputInterface::VERBOSITY_DEBUG);
                 $condition = ['softwares_id' => (int) $software['id']];
                 $soft_versions =  $softwareversion_db->find($condition);
-                foreach ($soft_versions as $old_id => $soft_version){
-                    PluginKbrenamingToolbox::change_softwareversion((int) $old_id, (int) $softwareversion['id']);
+                if (!PluginKbrenamingToolbox::moveSoftwareVersions(array_keys($soft_versions), (int) $softwareversion['id'])) {
+                    $output->writeln('<error>Error : cannot move the items of software "' . $software['name'] . '", kept</error>');
+                    continue;
                 }
             }else{
                 $kbData = $kb->getByName($software['name']);
@@ -155,7 +160,11 @@ class RenamesoftwarekbCommand extends AbstractCommand{
                     $soft = array_shift($softs);
                     $soft_id = (int) $soft['id'];
                 }
-                $condition = ['name' => $kbData->getField("name")];
+                if ((int) $soft_id === (int) $software['id']) {
+                    // Target is the KB software itself: deleting it would lose its items.
+                    continue;
+                }
+                $condition = ['name' => $kbData->getField("name"), 'softwares_id' => (int) $soft_id];
                 $soft_versions = $softwareversion_db->find($condition,[],1);
                 if (empty($soft_versions)) {
                     $input = [
@@ -172,13 +181,17 @@ class RenamesoftwarekbCommand extends AbstractCommand{
                     $soft_version_id = $soft_version['id'];
 
                 }
-                if ($soft_version_id>0){
-                    $condition = ['softwares_id' => (int) $software['id']];
-                    $softwareversions =  $softwareversion_db->find($condition);
-                    foreach ($softwareversions as $id => $softwareversion){
-//                        $this->getFromDB($this->fields['id']);
-                        PluginKbrenamingToolbox::change_softwareversion((int) $id, (int) $soft_version_id);
-                    }
+                // Without a target version, or if an item could not be moved, the
+                // KB software is kept: deleting it would orphan its installations.
+                if ((int) $soft_version_id <= 0) {
+                    $output->writeln('<error>Error : cannot create version "' . $kbData->getField('name') . '", software kept</error>');
+                    continue;
+                }
+                $condition = ['softwares_id' => (int) $software['id']];
+                $softwareversions =  $softwareversion_db->find($condition);
+                if (!PluginKbrenamingToolbox::moveSoftwareVersions(array_keys($softwareversions), (int) $soft_version_id)) {
+                    $output->writeln('<error>Error : cannot move the items of software "' . $software['name'] . '", kept</error>');
+                    continue;
                 }
             }
 

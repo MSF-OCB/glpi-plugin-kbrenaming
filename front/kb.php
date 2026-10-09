@@ -30,7 +30,10 @@
  * ---------------------------------------------------------------------
 */
 
-include ('../../../inc/includes.php');
+if (!defined('GLPI_ROOT')) {
+    // GLPI 10 only: GLPI 11 boots itself, GLPI 12 deprecates this inclusion.
+    include ('../../../inc/includes.php');
+}
 
 $dropdown = new PluginKbrenamingKb();
 include (GLPI_ROOT . "/front/dropdown.common.php");
